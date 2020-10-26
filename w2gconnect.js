@@ -1,6 +1,6 @@
 registerPlugin({
     name: 'Watch2Gether Connector',
-    version: '1.0.0',
+    version: '1.0.1',
     backends: ['ts3'],
     description: 'This script will automatically generate w2g links when entering the keyword in teamspeak chat',
     author: 'Can Kocyigit <cank3698@googlemail.com>',
@@ -50,22 +50,41 @@ registerPlugin({
     const event = require('event');
     const http = require('http');
     const backend = require('backend');
-   
+	const store = require('store');
+	
 
-    event.on('chat', ({ client, text }) => {
-    var messages = text.split(" ");
-    if(messages[0] == config.command_trigger && messages[1] === undefined)
-    {
-        createRoom();
-    }
-    if(messages[0] == config.command_trigger && messages[1] !== undefined)
-    {
-        if(messages[1].includes("www.youtube.com"))
-        createRoom(messages[1]);
-    }
+    event.on('chat',  function(ev) {
+		var messages = ev.text.split(" ");
+		
+		if(messages[0] == config.command_trigger && messages[1] === undefined)
+		{	
+			sendMsg(createRoom(), ev.client.id(), ev.mode)
+		}
+		if(messages[0] == config.command_trigger && messages[1] !== undefined)
+		{
+			if(messages[1].includes("www.youtube.com"))
+			sendMsg(createRoom(messages[1]), ev.client.id(), ev.mode);
+		}
     
     });
-
+	
+	function sendMsg(msg, to_client, mode)
+	{
+		switch(Number(mode)) {
+			case 1:
+				backend.getClientByID(to_client).chat(msg);
+				//engine.log(backend.getClientByID(to_client).getChannels()[0])
+				//backend.getClientByID(to_client).getChannels()[0].chat(msg);
+				break;
+			case 2:
+				backend.getCurrentChannel().chat(msg);
+				break;
+			case 3:
+				backend.chat(msg);
+				break;
+		}
+	}
+	
     function createRoom(yturl = config.default_yt_link)
     {
         var sendData = JSON.stringify({'w2g_api_key':config.w2g_api_key,'share':yturl,'bg_color':config.w2g_color,'bg_opacity':config.w2g_opacity});
@@ -95,10 +114,12 @@ registerPlugin({
             }
             if (res === undefined) {
                 engine.log("Invalid JSON.");
-                return;
+                return "Invalid JSON.";
             }
-            backend.getCurrentChannel().chat(makeUrl(res.streamkey));
+			store.set('url',makeUrl(res.streamkey));
         });
+		return store.get('url');
+		
     }
 
     function makeUrl(streamkey)
