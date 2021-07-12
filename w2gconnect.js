@@ -1,9 +1,9 @@
 registerPlugin({
-    name: 'Watch2Gether Connector',
-    version: '1.0.1',
+    name: 'Watch2Gether Link Generator',
+    version: '1.1.0',
     backends: ['ts3'],
-    description: 'This script will automatically generate w2g links when entering the keyword in teamspeak chat',
-    author: 'Can Kocyigit <cank3698@googlemail.com>',
+    description: 'This script will automatically generate w2g links when entering the keyword in TeamSpeak chat',
+    author: 'Can Kocyigit <cank3698@googlemail.com>, Datus <noemail4u>',
     requiredModules: ['http'],
     vars: [
     {
@@ -16,7 +16,7 @@ registerPlugin({
         name: 'command_trigger',
         title: 'command to trigger with',
         type: 'string',
-        placeholder: '!w2g'
+        placeholder: 'w2g'
     },
     {
         name: 'w2g_color',
@@ -43,61 +43,71 @@ registerPlugin({
         Login to your account > “Edit Profile” on the right > At the bottom “New” to generate a new key",
         type: 'string'
     }
-    ] 
+    ]
 }, (_, config, meta) => {
+const engine = require('engine');
+const event = require('event');
+const http = require('http');
+const backend = require('backend');
+const store = require('store');
 
-    const engine = require('engine');
-    const event = require('event');
-    const http = require('http');
-    const backend = require('backend');
-	const store = require('store');
-	
+var videoUrl = "";
 
-    event.on('chat',  function(ev) {
-		var messages = ev.text.split(" ");
-		
-		if(messages[0] == config.command_trigger && messages[1] === undefined)
-		{	
-			sendMsg(createRoom(), ev.client.id(), ev.mode)
-		}
-		if(messages[0] == config.command_trigger && messages[1] !== undefined)
-		{
-			if(messages[1].includes("www.youtube.com"))
-			sendMsg(createRoom(messages[1]), ev.client.id(), ev.mode);
-		}
-    
+event.on('load', () => {
+    const command = require('command');
+
+    if (!command) {
+        return;
+    }
+
+    engine.log("Registering command: " + config.command_trigger);
+    command.createCommand(config.command_trigger)
+    .addArgument(command.createArgument('string').setName('videoUrl'))
+    .help('Create Watch2Gether lobby')
+    .manual('Create a Watch2Gether lobby and set the initial video (optional)')
+    .exec((client, args, reply, ev) => {
+        var videoUrl = args.videoUrl;
+
+        if (videoUrl == '') {
+            videoUrl = config.default_yt_link;
+        }
+
+        createRoom(videoUrl, reply);
     });
-	
-	function sendMsg(msg, to_client, mode)
-	{
-		switch(Number(mode)) {
-			case 1:
-				backend.getClientByID(to_client).chat(msg);
-				//engine.log(backend.getClientByID(to_client).getChannels()[0])
-				//backend.getClientByID(to_client).getChannels()[0].chat(msg);
-				break;
-			case 2:
-				backend.getCurrentChannel().chat(msg);
-				break;
-			case 3:
-				backend.chat(msg);
-				break;
-		}
-	}
-	
-    function createRoom(yturl = config.default_yt_link)
-    {
-        var sendData = JSON.stringify({'w2g_api_key':config.w2g_api_key,'share':yturl,'bg_color':config.w2g_color,'bg_opacity':config.w2g_opacity});
-	    http.simpleRequest({
-            'method': 'POST',
-            'url': config.w2g_api_endpoint,
-            'timeout': 6000,
-            'body': sendData,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Content-Length': sendData.length
-            }
-        }, function (error, response) {
+});
+
+function sendMsg(msg, to_client, mode)
+{
+    switch(Number(mode)) {
+        case 1:
+            backend.getClientByID(to_client).chat(msg);
+            //engine.log(backend.getClientByID(to_client).getChannels()[0])
+            //backend.getClientByID(to_client).getChannels()[0].chat(msg);
+            break;
+        case 2:
+            backend.getCurrentChannel().chat(msg);
+            break;
+        case 3:
+            backend.chat(msg);
+            break;
+    }
+}
+
+function createRoom(yturl, reply)
+{
+    var sendData = JSON.stringify({'w2g_api_key':config.w2g_api_key,'share':yturl,'bg_color':config.w2g_color,'bg_opacity':config.w2g_opacity});
+
+    http.simpleRequest({
+        'method': 'POST',
+        'url': config.w2g_api_endpoint,
+        'timeout': 2000,
+        'body': sendData,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Content-Length': sendData.length
+        }
+        },
+        function (error, response) {
             if (error) {
                 engine.log("Error: " + error);
                 return;
@@ -105,24 +115,22 @@ registerPlugin({
             if (response.statusCode != 200) {
                 engine.log("HTTP Error: " + response.status);
                 return;
-            }
-            var res;
-            try {
-                res = JSON.parse(response.data.toString());
-            } catch (err) {
-                engine.log(err.message);
-            }
-            if (res === undefined) {
-                engine.log("Invalid JSON.");
-                return "Invalid JSON.";
-            }
-			store.set('url',makeUrl(res.streamkey));
-        });
-		return store.get('url');
-		
-    }
+        }
+        var res;
+        try {
+            res = JSON.parse(response.data.toString());
+        } catch (err) {
+            engine.log(err.message);
+        }
+        if (res === undefined) {
+            engine.log("Invalid JSON.");
+            return "Invalid JSON.";
+        }
+        reply(makeUrl(res.streamkey));
+    });
+}
 
-    function makeUrl(streamkey)
-    {return "https://w2g.tv/rooms/" + streamkey + "?lang=de"}
-
+function makeUrl(streamkey) {
+    return "https://w2g.tv/rooms/" + streamkey;
+}
 })
